@@ -1,0 +1,131 @@
+using System;
+using System.Threading;
+
+class Atraccion
+{
+    public string Nombre { get; }
+    private int CapacidadMaxima;
+    private int VisitantesActuales;
+    private object nemesis = new object();
+
+    public Atraccion(string nombre, int capacidad)
+    {
+        Nombre = nombre;
+        CapacidadMaxima = capacidad;
+        VisitantesActuales = 0;
+    }
+
+    public bool IntentarEntrar(string nombreVisitante)
+    {
+        bool entro = false;
+
+        if (Monitor.TryEnter(nemesis, TimeSpan.FromMilliseconds(500)))
+        {
+            try
+            {
+                if (VisitantesActuales < CapacidadMaxima)
+                {
+                    VisitantesActuales++;
+                    entro = true;
+                    Console.WriteLine($"{nombreVisitante} entró a {Nombre}. Visitantes actuales: {VisitantesActuales}");
+                }
+                else
+                {
+                    Console.WriteLine($"{nombreVisitante} no pudo entrar a {Nombre}, está llena.");
+                }
+            }
+            finally
+            {
+                Monitor.Exit(nemesis); 
+            }
+        }
+        else
+        {
+            Console.WriteLine($"{nombreVisitante} no logró obtener acceso a {Nombre} (lock ocupado).");
+        }
+
+        
+        if (entro)
+        {
+            Thread.Sleep(1000); 
+
+          
+            lock (nemesis)
+            {
+                VisitantesActuales--;
+                Console.WriteLine($"{nombreVisitante} salió de {Nombre}. Visitantes actuales: {VisitantesActuales}");
+            }
+        }
+
+        return entro;
+    }
+}
+
+
+class Visitante
+{
+    private string Nombre;
+    private Atraccion[] Atracciones;
+    private Random random = new Random();
+
+    public Visitante(string nombre, Atraccion[] atracciones)
+    {
+        Nombre = nombre;
+        Atracciones = atracciones;
+    }
+
+    public void Ejecutar()
+    {
+        for (int i = 0; i < 5; i++) 
+        {
+            int indice = random.Next(Atracciones.Length);
+            var atraccion = Atracciones[indice];
+
+            bool entro = atraccion.IntentarEntrar(Nombre);
+
+            if (!entro)
+            {
+                int espera = random.Next(500, 1000);
+                Console.WriteLine($"{Nombre} espera {espera} ms antes de intentar otra vez.");
+                Thread.Sleep(espera);
+            }
+            else
+            {
+                Thread.Sleep(random.Next(300, 600)); // Descanso luego del paseo
+            }
+        }
+
+        Console.WriteLine($"{Nombre} ha terminado su recorrido.");
+    }
+}
+
+class Program
+{
+    static void Main()
+    {
+        Atraccion[] atracciones = new Atraccion[]
+        {
+            new Atraccion("Montaña Rusa", 2),
+            new Atraccion("Rueda de Chicago", 3),
+            new Atraccion("Carrusel", 4)
+        };
+
+        Thread[] hilosVisitantes = new Thread[10];
+
+        for (int i = 0; i < hilosVisitantes.Length; i++)
+        {
+            string nombreVisitante = $"Visitante-{i + 1}";
+            Visitante visitante = new Visitante(nombreVisitante, atracciones);
+            hilosVisitantes[i] = new Thread(new ThreadStart(visitante.Ejecutar));
+            hilosVisitantes[i].Start();
+        }
+
+        // Esperar a que todos terminen
+        foreach (var hilo in hilosVisitantes)
+        {
+            hilo.Join();
+        }
+
+        Console.WriteLine("\n¡Todos los visitantes han terminado su visita al parque!");
+    }
+}
